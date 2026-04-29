@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+
+# LangChain + Cortex wrapper deps
+langchain
+langchain-core
+langchain-openai
+httpx
+
+# DeepEval
+deepeval
+
+# Auth (optional, for MSAL/AWS)
+msal==1.30.0
+boto3
+botocore

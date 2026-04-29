@@ -1,0 +1,42 @@
+{
+  "agent_name": "RAG Agent",
+  "evaluation_id": "eval-demo-001",
+  "timestamp": "2026-04-28T10:30:00Z",
+  "runs": [
+    {
+      "run_id": "run-001",
+      "timestamp": "2026-04-28T10:15:22Z",
+      "user_query": "Summarize the Phase 3 clinical trial results for Drug X in oncology",
+      "input": "Summarize Phase 3 trial results for Drug X for Medical Affairs team, oncology indication",
+      "output": "Key Insights: Drug X demonstrated 45% reduction in primary endpoint (PFS) vs standard of care.\nSection 1: Overview - Phase 3 randomized double-blind trial enrolled 1,247 patients across 87 sites.\nSection 2: Efficacy - Primary endpoint of progression-free survival met with HR=0.55 (95% CI: 0.45-0.67), p<0.0001. Median PFS 14.2 months vs 7.8 months for control.\nSection 3: Safety - Grade 3+ adverse events in 28% of treatment arm vs 22% control. Most common: neutropenia (12%), fatigue (8%).\nSection 4: Medical Affairs CCG - Indication: NSCLC 2L+ | Evidence: Phase 3 PROFILE-301 | Recommendation: Add to formulary for biomarker-positive patients.\nSection 5: Development Summary - Regulatory submission planned Q3 2026. Companion diagnostic in parallel review.\nSection 6: Development CCG - Manufacturing scale-up complete; supply readiness Q4 2026.\nSection 7: Confidence - HIGH for primary efficacy (mature Phase 3 data, n=1247). MEDIUM for subgroup analyses (smaller sample sizes). LOW for long-term OS (data not yet mature).\nFilters confirmed: Indication=Oncology, Phase=3, Role=Medical Affairs, Region=US, Year=2026."
+    },
+    {
+      "run_id": "run-002",
+      "timestamp": "2026-04-28T10:18:45Z",
+      "user_query": "What is the safety profile of Drug Y in cardiovascular patients?",
+      "input": "Provide safety profile summary of Drug Y for cardiovascular indication, Medical Affairs view",
+      "output": "Key Insights: Drug Y shows favorable cardiovascular safety with manageable adverse event profile.\nSection 1: Overview - Pooled safety data from 3 Phase 3 trials, 2,840 patients, mean exposure 18 months.\nSection 2: Efficacy - Secondary safety endpoints: 32% reduction in MACE composite vs placebo.\nSection 3: Safety - Serious AE rate 8.4% (treatment) vs 7.9% (placebo). No QT prolongation signal.\nSection 4: Medical Affairs CCG - Indication: HF with reduced EF | Evidence: COMPASS-HF Phase 3 | Recommendation: Monitor renal function quarterly; safe for elderly subgroup.\nSection 5: Development Summary - Label expansion to HFpEF in planning.\nSection 6: Development CCG - Real-world evidence study launching Q2 2026.\nSection 7: Confidence - HIGH for primary safety endpoints (large pooled dataset). MEDIUM for rare events (<1% incidence). LOW for pediatric population (no data).\nFilters confirmed: Indication=Cardiology, Phase=3, Role=Medical Affairs, Region=Global, Year=2026."
+    },
+    {
+      "run_id": "run-003",
+      "timestamp": "2026-04-28T10:21:10Z",
+      "user_query": "Latest immunology pipeline status for Drug Z",
+      "input": "Drug Z immunology pipeline development status",
+      "output": "Drug Z is in Phase 2. Showed some promise in autoimmune disease. More data coming soon. Trials enrolled about 200 patients."
+    },
+    {
+      "run_id": "run-004",
+      "timestamp": "2026-04-28T10:25:33Z",
+      "user_query": "Long-term efficacy data for Drug A in diabetes",
+      "input": "5-year follow-up efficacy for Drug A in type 2 diabetes",
+      "output": "Key Insights: Drug A maintains glycemic control and cardiovascular benefits at 5-year follow-up.\nSection 1: Overview - Open-label extension of LEADER-2 trial; 1,580 patients completed 5 years.\nSection 2: Efficacy - Sustained HbA1c reduction of -1.2% from baseline. 22% reduction in 3-point MACE.\nSection 3: Safety - No new safety signals. Hypoglycemia rate stable at 4.1/100 patient-years.\nSection 4: Medical Affairs CCG - Indication: T2DM with CV risk | Evidence: LEADER-2 OLE | Recommendation: First-line for patients with established CVD.\nSection 5: Development Summary - Label update submitted; pediatric trial Phase 3 enrolling.\nSection 6: Development CCG - Combination product with metformin in Phase 2.\nSection 7: Confidence - HIGH for adult efficacy/safety (5-year data, n=1580). MEDIUM for combination therapy outcomes. LOW for pediatric extrapolation.\nFilters confirmed: Indication=Endocrinology, Phase=Extension, Role=Medical Affairs, Region=Global, Year=2026."
+    },
+    {
+      "run_id": "run-005",
+      "timestamp": "2026-04-28T10:28:55Z",
+      "user_query": "Development team update on Drug B manufacturing readiness",
+      "input": "Manufacturing readiness status for Drug B for Development team",
+      "output": "Key Insights: Drug B manufacturing on track for commercial launch Q1 2027.\nSection 1: Overview - Tech transfer to commercial site complete; 3 validation batches passed.\nSection 2: Efficacy - N/A (manufacturing focus).\nSection 3: Safety - N/A (manufacturing focus).\nSection 4: Medical Affairs CCG - N/A.\nSection 5: Development Summary - Commercial-scale production validated. Stability data to 24 months supports shelf-life claim.\nSection 6: Development CCG - Site: Indianapolis | Capacity: 500K units/year | Risk: Single-source raw material identified, dual-sourcing in progress.\nSection 7: Confidence - HIGH for manufacturing readiness (validated process). MEDIUM for raw material supply chain (single source). LOW for demand forecast accuracy.\nFilters confirmed: Indication=Oncology, Phase=Pre-launch, Role=Development, Region=US, Year=2026."
+    }
+  ]
+}
