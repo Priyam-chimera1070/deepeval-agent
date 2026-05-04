@@ -1,192 +1,142 @@
-# RAG Agent Evaluation Service — Complete Project Context
+# RAG / DxSynthesizer Agent Evaluation Service
 
-## What this project is
-A backend-only evaluation microservice that receives RAG Agent outputs, evaluates them using guidelines-based approach with DeepEval metrics and an LLM judge, and returns structured JSON results. No UI, no frontend — backend only.
+Backend-only FastAPI microservice (v3.0.0) that evaluates **batches of runs** from a single agent against a per-agent guidelines spec, using DeepEval metrics + a Cortex LLM judge. Pipeline team posts to `POST /evaluate`; UI team consumes the JSON response. No frontend in this repo.
 
-## Team Structure & Responsibilities
-This is a team project. There are 3 roles:
-
-- **My role (this service)**: Evaluation backend only — receiving RAG Agent outputs, running guidelines-based LLM evaluation, returning structured results
-- **Pipeline team**: Builds the multi-agent runtime, saves logs/traces to S3, retrieves them, and calls my POST /evaluate API. They also integrate my API into CI/CD.
-- **UI team**: Builds the dashboard and frontend to visualize the evaluation results my API returns
-
-I do NOT touch the pipeline or the UI. My contract with both teams:
-- Input: JSON payload sent by pipeline team to POST /evaluate
-- Output: Structured JSON evaluation results
-
-## Original Requirement (what this was built for)
-Build an intelligent evaluation API service that:
-- Receives RAG Agent outputs from the pipeline team
-- Uses guidelines-based evaluation approach
-- Runs DeepEval GuidelinesAdherence + AnswerRelevancy metrics
-- Uses LLM judge to evaluate against predefined guidelines
-- Returns actionable quality results automatically
-- Works in automated CI/CD pipeline
+## Tech stack
+- **FastAPI** + **uvicorn** — API + ASGI server
+- **DeepEval 3.9.7** — `GuidelinesAdherence` (GEval) + `AnswerRelevancyMetric`
+- **LangChain** — only used by the Cortex wrapper (`cortex_llm.py`)
+- **Pydantic 2** — request/response validation
+- **httpx** — Cortex platform calls
+- **Python 3.12**, venv at `venv/`
 
 ## LLM
-- Model: Claude (agent name: testing125) via Cortex platform
-- Platform: Cortex (internal company AI platform at cortex.lilly.com)
-- Auth: Cookie-based for local dev (CORTEX_COOKIE in .env)
-- One single LLM instance used for everything — no multiple models
-- Confirmed working: temperature=0.7, max_tokens=4096, multimodal=False, auth_mode=cookie
+- Single Cortex agent (e.g. Claude `testing125`) reached via `cortex.lilly.com`
+- Auth modes: cookie (dev), MSAL (Azure AD), AWS SigV4 — auto-selected from env
+- One singleton instance shared everywhere via `llm_client.get_llm()` / `get_deepeval_llm()`
 
-## Tech Stack
-- FastAPI — API layer
-- DeepEval 3.9.7 — evaluation metrics (GuidelinesAdherence GEval + AnswerRelevancy)
-- LangChain — only used for the Cortex wrapper (cortex_llm.py)
-- Pydantic 2.13.1 — request/response validation
-- httpx — HTTP calls to Cortex platform
-- Python 3.12
-- uvicorn 0.44.0 — ASGI server
-
-## Project Structure
+## Project structure
 ```
 DeepEval_Agent/
 ├── app/
-│   ├── main.py                  # FastAPI app entry point, CORS, includes router
+│   ├── main.py                       # FastAPI app, CORS, /health, mounts router
 │   ├── api/
-│   │   ├── schemas.py           # Pydantic request/response models (simplified)
-│   │   └── routes.py            # POST /evaluate — guidelines-only evaluation logic
+│   │   ├── routes.py                 # POST /evaluate — async batch w/ Semaphore(MAX_PARALLEL_RUNS=10)
+│   │   └── schemas.py                # EvaluationRequest{agent_name?, evaluation_id?, runs[]}, RunPayload, RunResult, EvaluationResponse
 │   ├── core/
-│   │   ├── config.py            # All env vars via pydantic-settings (settings object)
-│   │   └── logger.py            # Session logger — one log file per server session
+│   │   ├── config.py                 # pydantic-settings (Cortex URLs, pass/warn thresholds)
+│   │   └── logger.py                 # Singleton session logger → logs/evaluation_session_{ts}.log
 │   ├── llm/
-│   │   ├── cortex_llm.py        # Cortex platform LangChain wrapper (CortexAgentChatModel)
-│   │   ├── deepeval_wrapper.py  # Bridges Cortex LLM → DeepEval interface (CortexDeepEvalLLM)
-│   │   └── llm_client.py        # Singletons + Judge (guidelines-based only)
+│   │   ├── cortex_llm.py             # CortexAgentChatModel (LangChain BaseChatModel) — agent config fetch, model_versions fallback, cookie/MSAL/AWS, tools + structured output
+│   │   ├── deepeval_wrapper.py       # CortexDeepEvalLLM — thin DeepEvalBaseLLM adapter
+│   │   └── llm_client.py             # Singletons + judge_output() (3-attempt retry, robust JSON parsing, humanized errors)
 │   └── evaluation/
-│       ├── guidelines.py        # RAG Agent guidelines registry
-│       ├── metric_predictor.py  # Builds guidelines metrics (GuidelinesAdherence + AnswerRelevancy)
-│       ├── deepeval_runner.py   # Builds LLMTestCase + runs DeepEval metrics
-│       └── result_formatter.py  # PASS/WARN/FAIL scoring + final JSON shape
-├── logs/                        # Auto-created — one log file per server session
-├── .env                         # CORTEX_COOKIE and CORTEX_AGENT_NAME (fill in)
-├── .env.example                 # Template
+│       ├── guidelines.py             # AGENT_GUIDELINES dict — keys: "rag agent", "dxsynthesizer"
+│       ├── metric_predictor.py       # build_guidelines_metrics() → fixed [GuidelinesAdherence GEval, AnswerRelevancyMetric] (threshold=0.5)
+│       ├── deepeval_runner.py        # run_deepeval_metrics() — per-metric 3-attempt retry, transient/fatal classification, humanized errors → (scores, errors)
+│       └── result_formatter.py       # format_run_result / format_error_run / format_final_response — converts to percentages, assigns PASS/WARN/FAIL/ERROR
+├── logs/                             # Auto-created, one file per server session
+├── .env                              # CORTEX_COOKIE, CORTEX_AGENT_NAME, etc.
 ├── requirements.txt
-├── run.py                       # Start server: py run.py
-├── test_api.py                  # Full API test: health + RAG Agent evaluation tests
-├── test_llm.py                  # Direct LLM connection test (no server needed)
-└── test_evaluate_direct.py      # Runs full evaluate logic directly (no server, shows tracebacks)
+├── run.py                            # uvicorn entry point
+├── sample_payload.json               # RAG Agent example (5 runs)
+├── sample_payload_dxsynth.json       # DxSynthesizer example (50 runs)
+├── test_api.py                       # Hits live server with 1-run + 2-run payloads
+├── test_evaluate_direct.py           # Runs evaluate logic in-process (real tracebacks)
+└── test_llm.py                       # Cortex LLM connectivity check
 ```
 
-## Evaluation Approach — Guidelines Mode Only
+## Evaluation flow (per request)
+1. Resolve `agent_name` (defaults to `"RAG Agent"`); load guidelines from registry once.
+2. Build metrics once: `[GEval(GuidelinesAdherence, threshold=0.5), AnswerRelevancyMetric]`.
+3. Process up to `MAX_PARALLEL_RUNS=10` runs concurrently (asyncio + semaphore; sync DeepEval calls offloaded via `asyncio.to_thread`):
+   - Run DeepEval metrics → 2 LLM calls (with 3-attempt retry on transient failures)
+   - Run `judge_output()` → 1 LLM call (with 3-attempt retry, robust JSON parse fallback)
+   - Format result; status from `overall_score` (% scale)
+4. Aggregate: `average_score` is mean of `overall_score` across **successful** runs only.
 
-The service now uses **only guidelines-based evaluation**:
+**~3 LLM calls per run.**
 
-1. Receives RAG Agent output
-2. Loads predefined guidelines from registry
-3. Builds fixed metrics: GuidelinesAdherence (GEval) + AnswerRelevancy
-4. Runs DeepEval metrics (2 LLM calls)
-5. LLM judge evaluates actual output against guidelines (1 LLM call)
-6. Returns PASS/WARN/FAIL with scores and actionable feedback
+## Status thresholds (config: `pass_threshold=0.85`, `warn_threshold=0.70`)
+- `PASS`  ≥ 85
+- `WARN`  ≥ 70
+- `FAIL`  < 70
+- `ERROR` — run crashed entirely
 
-**Total LLM calls: 3 per component** (faster and more precise than previous dual-mode approach)
-
-## RAG Agent Guidelines
-
-The guidelines cover 6 key requirements:
-1. **Structure & Completeness** — all 7 sections in order, Key Insights first, min 4 max 8 cards per section
-2. **Role Specificity** — strict Medical Affairs vs Development separation
-3. **Content Accuracy & Grounding** — no fabrication, sources cited per card
-4. **CCG Alignment** — MA full 3-column in Section 4, Dev condensed in Section 6
-5. **Confidence & Transparency** — Section 7 must have HIGH/MEDIUM/LOW with rationale
-6. **Filter Confirmation** — all 5 filters confirmed before output
-
-## LLM Layer Detail
-- cortex_llm.py → CortexAgentChatModel (LangChain BaseChatModel)
-  - Fetches agent config from Cortex on init (_fetch_and_apply_config)
-  - Supports cookie / MSAL / AWS SigV4 auth modes
-  - Cookie auth: calls POST /model/ask/{agent_name} with httpx
-  - Has fallback across model_versions if primary fails
-- deepeval_wrapper.py → CortexDeepEvalLLM (DeepEval DeepEvalBaseLLM)
-  - Thin wrapper so DeepEval metrics can use the same Cortex LLM
-- llm_client.py
-  - get_llm() → singleton CortexAgentChatModel
-  - get_deepeval_llm() → singleton CortexDeepEvalLLM
-  - judge_output() → evaluates actual output against guidelines
-
-## Scoring Logic
-- overall_score per component = mean(GuidelinesAdherence score + AnswerRelevancy score + judge_score)
-- pipeline_score = mean(all component overall_scores)
-- PASS: overall_score >= 0.85
-- WARN: overall_score >= 0.70
-- FAIL: overall_score < 0.70
-- Thresholds configurable via PASS_THRESHOLD and WARN_THRESHOLD in .env
-
-## API Endpoints
-- POST /evaluate — main evaluation endpoint
-- GET /health — returns {"status": "ok"}
-- FastAPI docs available at http://localhost:8000/docs when server is running
-
-## Payload Schema
-
-### Request (simplified)
+## Request schema (`POST /evaluate`)
 ```json
 {
-  "query_id": "Q123",              
-  "timestamp": "ISO_TIMESTAMP",   
-  "user_query": "user question",  
-  "components": [
+  "agent_name": "RAG Agent",                        // optional; default "RAG Agent"
+  "evaluation_id": "eval-xyz",                      // optional; auto-generated as eval-{8hex}
+  "timestamp": "2026-04-28T10:30:00Z",              // optional
+  "runs": [
     {
-      "name": "RAG Agent",        
-      "input": "...",              
-      "output": "..."             
+      "run_id": "run-001",                          // optional; auto-generated as run-{idx:03d}
+      "timestamp": "2026-04-28T10:15:22Z",          // optional
+      "user_query": "Summarize Drug X trial results",
+      "input": "Summarize for Medical Affairs",
+      "output": "Key Insights: ...\nSection 1: ..."
     }
   ]
 }
 ```
 
-Field notes:
-- query_id — optional, auto-generated as "auto-{uuid}" if missing
-- user_query — required
-- components — array of RAG Agent outputs to evaluate
-
-### Response (simplified)
+## Response schema
 ```json
 {
-  "query_id": "Q123",
-  "pipeline_score": 0.87,
-  "pipeline_status": "PASS",
+  "evaluation_id": "eval-xyz",
+  "agent_name": "RAG Agent",
   "timestamp": "...",
-  "results": [
+  "total_runs": 5,
+  "successful_runs": 4,
+  "failed_runs": 1,
+  "average_score": 87.4,
+  "average_status": "PASS",
+  "runs": [
     {
-      "component_name": "RAG Agent",
-      "metrics": {"guidelinesadherence": 0.91, "answerrelevancymetric": 0.88},
-      "judge_score": 0.88,
-      "judge_confidence": 0.92,
+      "run_id": "run-001",
+      "timestamp": "...",
+      "user_query": "...",
+      "metrics": { "guidelinesadherence": 91.0, "answerrelevancymetric": 88.0 },   // percentages, null if metric failed
+      "metric_errors": { "answerrelevancymetric": "The evaluator LLM call timed out..." },  // only present per failed metric
+      "judge_score": 88.0,
+      "judge_confidence": 92.0,
       "judge_reasoning": "...",
       "judge_strengths": ["..."],
       "judge_issues": ["..."],
       "judge_suggestions": ["..."],
-      "overall_score": 0.895,
-      "status": "PASS"
+      "judge_error": null,                          // human-readable if judge failed
+      "overall_score": 89.0,
+      "status": "PASS",
+      "error": null                                 // only set if entire run failed (status="ERROR")
     }
   ]
 }
 ```
 
-Response field notes:
-- metrics — always contains guidelinesadherence + answerrelevancymetric
-- judge_confidence — how confident the judge is in its evaluation
-- judge_suggestions — actionable fixes for each issue found
+**Important:** all scores in the response are **percentages (0–100)**, even though internal thresholds in `config.py` are stored as 0–1.
 
-## Metrics Used
+## Agents in the registry
+- `"rag agent"` — 6-rule spec (structure, role specificity, grounding, CCG alignment, confidence, filter confirmation)
+- `"dxsynthesizer"` — strict 9-section congress-brief spec with hard-fail rules, citation discipline, role-aware track ordering
 
-**Fixed metrics for all evaluations:**
-- **GuidelinesAdherence** — GEval with RAG Agent guidelines as criteria (primary metric)
-- **AnswerRelevancy** — output directly answers the user query
+Look up via `get_guidelines(agent_name)` (case-insensitive). Adding a new agent = add an entry to `AGENT_GUIDELINES` in `app/evaluation/guidelines.py`.
+
+## Error handling
+Every failure path produces a humanized message (cookie expired, JSON parse failure, 429/5xx, timeouts, network errors). Three layers:
+- **Per metric** — `deepeval_runner._humanize_metric_error()`
+- **Per judge call** — `llm_client._humanize_llm_error()`
+- **Per run** — `routes._humanize_run_error()`
 
 ## Logging
-- logs/ folder at project root — auto-created
-- app/core/logger.py — get_session_logger() singleton
-- One log file per server session: logs/evaluation_session_{timestamp}.log
-- All POST /evaluate calls during a session append to the same file
-- Logs every step: request received, component details, each step output, final result
+- `app/core/logger.py` installs a singleton root logger at startup (`get_session_logger()` is called from `main.py`).
+- One file per server session: `logs/evaluation_session_YYYYMMDD_HHMMSS.log`
+- All module loggers (`app.*`, `deepeval`, `httpx`) flow into the same file.
 
-## .env Required Values
+## .env
 ```
-CORTEX_COOKIE=<your_cookie_from_cortex.lilly.com>
-CORTEX_AGENT_NAME=<your_claude_agent_name>   # currently: testing125
+CORTEX_COOKIE=<paste fresh cookie from cortex.lilly.com>
+CORTEX_AGENT_NAME=testing125
 CORTEX_API_BASE=https://cortex.lilly.com
 CORTEX_OPENAI_BASE=https://gateway.apim.lilly.com/cortex/cortex-openai
 USE_AWS_AUTH=false
@@ -194,55 +144,30 @@ PASS_THRESHOLD=0.85
 WARN_THRESHOLD=0.70
 ```
 
-## Venv & Dependencies
-- venv exists at DeepEval_Agent/venv/ — already created and all packages installed
-- Activate in PowerShell: .\venv\Scripts\activate.ps1
-- PowerShell does NOT support && — use ; instead
-- Key installed versions: deepeval==3.9.7, fastapi==0.135.3, langchain==1.2.15, uvicorn==0.44.0, pydantic==2.13.1, httpx==0.28.1, msal==1.30.0, boto3
-
-## Running the Service
+## Running
+PowerShell does **not** support `&&` — use `;`.
 ```powershell
-# Terminal 1 — start server
+# Start server (terminal 1)
 .\venv\Scripts\activate.ps1; py run.py
 
-# Terminal 2 — run tests
+# API tests against running server (terminal 2)
 .\venv\Scripts\activate.ps1; py test_api.py
 
-# Test LLM connection only (no server needed)
-.\venv\Scripts\activate.ps1; py test_llm.py
-
-# Test full evaluate logic directly with real tracebacks (no server needed)
+# Direct evaluation (no server, full tracebacks — best debug tool)
 .\venv\Scripts\activate.ps1; py test_evaluate_direct.py
+
+# LLM connectivity only
+.\venv\Scripts\activate.ps1; py test_llm.py
 ```
 
-## Key Decisions Made
-- **Simplified to guidelines-only approach** — removed standard mode, metric prediction, expected output generation
-- **Fixed metrics** — always GuidelinesAdherence + AnswerRelevancy
-- **Faster evaluation** — 3 LLM calls per component (down from 4-7)
-- **Single agent focus** — optimized for RAG Agent evaluation only
-- query_id is optional — auto-generated as "auto-{uuid}" if not provided
-- Single LLM instance shared via singleton pattern in llm_client.py
-- LangChain is only present because cortex_llm.py depends on it
-- GEval metrics require evaluation_params in deepeval 3.9.7+
-- Session logger singleton — one log file per server start, all requests in same file
-- judge_suggestions added — actionable fixes per issue found
-- judge_confidence added — transparency on how reliable the evaluation is
+Server listens on `http://localhost:8000`. Swagger UI at `/docs`. Raw OpenAPI at `/openapi.json` (no static yaml/json file on disk — generated at runtime by FastAPI).
 
-## Known Issues Fixed
-- GEval.__init__() missing evaluation_params — deepeval 3.9.7 made it required. Fixed in metric_predictor.py
-- FastAPI 500 with no traceback — use test_evaluate_direct.py to debug outside FastAPI
-- Cookie expiry — if you get HTTP 302 errors, update CORTEX_COOKIE in .env
-- JSON decode error in FastAPI docs — caused by pasting multiline strings with unescaped control characters. Use test_api.py with Python triple-quoted strings instead
-- PowerShell does not support && — use ; instead
+## Endpoints
+- `POST /evaluate` — main evaluation endpoint
+- `GET /health` — `{"status": "ok"}`
 
-## Things to Watch During Testing
-- Cookie expiry: CortexAgentChatModel fetches agent config on LLM singleton init — will throw 302 immediately if cookie is stale
-- GEval metric names come from their name= constructor arg, standard metrics use class name lowercased
-- test_evaluate_direct.py is the best debugging tool — shows real tracebacks step by step
-- When sending large payloads via FastAPI /docs, avoid actual newlines inside string fields — use test_api.py instead
-
-## Changes from Previous Version
-- **Removed**: Standard mode, metric predictor/selector, expected output generator (Role A), all standard DeepEval metrics except AnswerRelevancy
-- **Simplified**: Request schema (removed type, category, context, agent_prompt fields), response schema (removed category, evaluation_mode, expected_output fields)
-- **Faster**: 3 LLM calls per component instead of 4-7
-- **Focused**: Single agent (RAG Agent) with guidelines-based evaluation only
+## Common gotchas
+- **Cookie expiry** — `CortexAgentChatModel` fetches agent config on singleton init; HTTP 302 means refresh `CORTEX_COOKIE`.
+- **GEval requires `evaluation_params`** in DeepEval ≥ 3.9.7 (already set).
+- **Don't paste multiline strings into Swagger UI** — control characters break JSON parsing. Use `test_api.py` with triple-quoted strings instead.
+- **Concurrency** — `MAX_PARALLEL_RUNS=10`. Lower if you see Cortex 429s; raise cautiously.
