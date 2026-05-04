@@ -163,8 +163,8 @@ def _humanize_llm_error(exc: Exception) -> str:
     low = msg.lower()
     if "timeout" in low or "timed out" in low:
         return "The judge LLM call timed out before a response was received."
-    if "302" in msg or "cookie" in low or "redirect" in low:
-        return "Authentication with the Cortex platform failed (cookie expired or invalid)."
+    if "401" in msg or "unauthorized" in low or "token" in low:
+        return "Authentication with the Cortex APIM gateway failed (token request rejected; check APIM_CLIENT_ID / APIM_CLIENT_SECRET / APIM_SCOPE)."
     if "429" in msg or ("rate" in low and "limit" in low):
         return "The judge LLM rate limit was hit; the request could not complete."
     if any(code in msg for code in ("500", "502", "503", "504")):

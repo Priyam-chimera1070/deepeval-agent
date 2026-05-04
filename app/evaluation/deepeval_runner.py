@@ -48,8 +48,8 @@ def _humanize_metric_error(exc: Exception) -> str:
         )
     if "timeout" in low or "timed out" in low:
         return "The evaluator LLM call timed out before a score could be returned."
-    if "302" in msg or "cookie" in low or "redirect" in low:
-        return "Authentication with the Cortex platform failed (cookie expired or invalid)."
+    if "401" in msg or "unauthorized" in low or "token" in low:
+        return "Authentication with the Cortex APIM gateway failed (check APIM_CLIENT_ID / APIM_CLIENT_SECRET / APIM_SCOPE)."
     if "rate" in low and "limit" in low:
         return "The evaluator LLM rate limit was hit; the metric could not complete."
     if "429" in msg:

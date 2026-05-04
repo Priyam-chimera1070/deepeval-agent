@@ -25,8 +25,8 @@ def _humanize_run_error(exc: Exception) -> str:
     low = msg.lower()
     if "timeout" in low or "timed out" in low:
         return "Evaluation could not complete because an LLM call timed out."
-    if "302" in msg or "cookie" in low or "redirect" in low:
-        return "Evaluation aborted: Cortex authentication failed (cookie expired or invalid)."
+    if "401" in msg or "unauthorized" in low or "token" in low:
+        return "Evaluation aborted: Cortex APIM authentication failed (check APIM credentials)."
     if "429" in msg or ("rate" in low and "limit" in low):
         return "Evaluation aborted: rate limit hit on the evaluator LLM."
     if any(code in msg for code in ("500", "502", "503", "504")):
