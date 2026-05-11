@@ -12,7 +12,7 @@ from app.core.logger import get_session_logger
 router = APIRouter()
 
 # Hardcoded for now — change here when evaluating a different agent
-DEFAULT_AGENT_NAME = "RAG Agent"
+DEFAULT_AGENT_NAME = "DxSynthesizer"
 
 # Bounded concurrency for per-run evaluation. Tune based on Cortex tolerance.
 # 5 = safe default. Raise to 8–10 if you observe no 429s / disconnects.

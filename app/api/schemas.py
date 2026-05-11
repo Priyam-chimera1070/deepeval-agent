@@ -11,7 +11,7 @@ class RunPayload(BaseModel):
 
 
 class EvaluationRequest(BaseModel):
-    agent_name: Optional[str] = Field(None, description="Agent name (defaults to 'RAG Agent')")
+    agent_name: Optional[str] = Field(None, description="Agent name (defaults to 'DxSynthesizer')")
     evaluation_id: Optional[str] = Field(None, description="Unique evaluation identifier — auto-generated if missing")
     timestamp: Optional[str] = Field(None, description="ISO timestamp of the evaluation batch")
     runs: List[RunPayload] = Field(..., min_length=1, description="List of agent runs to evaluate")

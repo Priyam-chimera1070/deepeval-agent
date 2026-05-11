@@ -1,0 +1,554 @@
+AGENT_GUIDELINES = {
+    "rag agent": """
+1. Structure & Completeness — output must contain all 7 sections in order, Key Insights first, minimum 4 maximum 8 cards per section
+2. Role Specificity — strict Medical Affairs vs Development separation must be maintained throughout
+3. Content Accuracy & Grounding — no fabrication allowed, every claim must be grounded in source data, sources cited per card
+4. CCG Alignment — Medical Affairs must use full 3-column format in Section 4, Development must use condensed format in Section 6
+5. Confidence & Transparency — Section 7 must include HIGH/MEDIUM/LOW confidence rating with clear rationale for each rating
+6. Filter Confirmation — all 5 filters must be explicitly confirmed before generating output
+""",
+    "dxsynthesizer": """
+Evaluate whether the agent output strictly complies with the DxSynthesizer™ prompt for generating deeply structured, evidence-dense executive congress intelligence briefs from retrieved medical congress documents.
+
+Be STRICT, granular, and evidence-driven. Penalize omissions, compression, hallucination, and structural deviations heavily — but do NOT penalize a section for being short when the reference itself is genuinely sparse and the prescribed fallback is used.
+
+## CORE EVALUATION STANDARD
+
+The response must be:
+
+* Strictly grounded in `model_context` only
+* Complete in the required 9-section format
+* Correctly role-ordered in every dual-track section
+* Maximally dense (every extractable fact included)
+* Fully cited (every paragraph, bullet, and table row)
+* Factually exact (numbers, units, quotes preserved verbatim)
+* Non-hallucinatory (zero inference beyond reference)
+* Executive-grade and actionable
+
+## EVALUATION ORDER (apply in this order for stable scoring)
+
+1. Structural compliance (9 sections present + correct `### N. NAME` heading format)
+2. Role detection and lead/secondary track ordering
+3. Citation discipline (formats and coverage)
+4. Factual accuracy and source grounding
+5. Depth extraction completeness (8 dimensions)
+6. Section-specific content depth and density
+7. Style and executive readability
+
+---
+
+## 1. SOURCE GROUNDING & INPUT FIDELITY
+
+Check that the response:
+
+* Uses ONLY the provided `model_context` as the source of truth
+* Answers the user query directly
+* Uses chat history only for continuity, never as a source of facts
+* Reflects available metadata (conference, year, business unit, area of interest)
+* Does not inject external medical knowledge or assumptions
+* Utilizes ALL retrieved documents (no selective ignoring of relevant chunks)
+
+Penalize if:
+
+* Unsupported facts appear
+* Generic content unrelated to context appears
+* Important context evidence is ignored or under-extracted
+
+---
+
+## 2. QUERY ANSWERABILITY RULE
+
+If the query is not answerable from `model_context`, the correct output is EXACTLY:
+
+"I cannot answer based on current source material."
+
+with no extra notes, no preamble, no commentary, no structure.
+
+If `model_context` has zero documents, same response is required.
+
+HARD FAIL if:
+
+* The model fabricates a structured answer when evidence is absent
+* The model adds explanations or partial structure when the explicit fallback should have been used
+
+## 2A. PER-SECTION FALLBACK RULE
+
+If a single section has no supporting evidence, the section heading MUST still appear, followed by exactly:
+
+*"No sufficient evidence in current source material."*
+
+Penalize if:
+
+* A required section heading is omitted because of missing evidence
+* The absence is filled with fabricated, padded, or inferred content
+* The exact fallback string is paraphrased (e.g., "no data available", "not enough info")
+
+---
+
+## 3. ROLE DETECTION & TRACK PRIORITIZATION
+
+The system must detect role from query context and prioritize accordingly.
+
+If role = Medical Affairs:
+* Medical Affairs content first in EVERY dual-track section
+* Development content second
+
+If role = Development:
+* Development content first
+* Medical Affairs content second
+
+Both tracks must still be included unless impossible due to absent evidence (apply 2A).
+
+Penalize if:
+
+* Wrong role inferred
+* Wrong track ordering in any dual-track section
+* Inconsistent ordering across sections
+* One track silently omitted without per-section fallback
+
+---
+
+## 4. TRACK CLASSIFICATION QUALITY
+
+Findings must be correctly separated into:
+
+Medical Affairs Track:
+* Clinical outcomes, guidelines, patient impact, safety/efficacy, practice change, access/care delivery
+
+Development Track:
+* Assay platforms, biomarkers, AI/algorithms, technical performance, diagnostics pipelines, competitive technology, analytical specifications
+
+Anchoring examples:
+* "hs-Troponin LoD = 1.2 ng/L"  → Development
+* "0/1-hour rule-out reduced ED LoS by 2.4 hours"  → Medical Affairs
+* "ctDNA assay 84% concordance with tissue IHC"  → Development
+* "EAU guideline added PSMA PET to staging"  → Medical Affairs
+
+Penalize if:
+
+* Clinical findings placed under technical sections
+* Technical metrics placed under patient-facing sections
+* Major themes omitted
+
+---
+
+## 5. DEPTH EXTRACTION COMPLIANCE (HIGH WEIGHT)
+
+For every chunk in the reference, the brief must reflect extraction across these 8 dimensions where present:
+
+| Dimension | Check |
+|---|---|
+| WHAT | Core finding/result/recommendation surfaced |
+| WHO | Named speakers, institutions, study authors, populations preserved |
+| NUMBERS | EVERY quantitative value extracted (%, n, p, HR, OR, VAF, sensitivity, specificity, TAT, cost, concordance) |
+| CONTEXT | Disease setting, line of therapy, biomarker context, regulatory backdrop |
+| COMPARISON | Head-to-head, versus, competitor, historical benchmark |
+| IMPLICATION | Clinical practice / assay development / CDx strategy meaning |
+| GAP | Stated limitation, unmet need, open question |
+| SIGNAL | Forward-looking statement, pipeline mention, emerging trend |
+
+Rule of thumb: a chunk containing 5 extractable facts must contribute ~5 facts to the output, not 1.
+
+Penalize heavily if:
+
+* Multiple facts compressed into single sentences
+* Missing numeric values despite availability in reference
+* Comparison or implication insights missing when reference provides them
+* Same point repeated/rephrased instead of new dimensions extracted
+
+---
+
+## 6. REQUIRED 9-SECTION STRUCTURE (MANDATORY)
+
+The response MUST include these headings in EXACT format `### N. HEADING` and EXACT order:
+
+1. ### 1. CONFERENCE AT A GLANCE
+2. ### 2. EXECUTIVE SUMMARY
+3. ### 3. GUIDELINE UPDATES & CLINICAL RECOMMENDATIONS
+4. ### 4. KEY THOUGHT LEADERS & PRESENTERS
+5. ### 5. CLINICAL DATA HIGHLIGHTS
+6. ### 6. COMPETITIVE LANDSCAPE & EMERGING PLATFORMS / NEW TECHNOLOGIES
+7. ### 7. ASSAY INNOVATIONS & VAF
+8. ### 8. KEY TAKEAWAYS
+9. ### 9. REFERENCES
+
+Check:
+
+* All 9 headings present
+* Correct numerical order
+* Heading format matches `### N. NAME` (markdown H3 with number)
+* No structural substitutions (e.g., `**1. CONFERENCE...**` is non-compliant)
+
+Fail if:
+
+* Any section heading is missing
+* Order is wrong
+* Heading format deviates from `### N. NAME`
+* Sections are merged, renamed, or split
+
+---
+
+## 7. SECTION 1 — CONFERENCE AT A GLANCE
+
+Required:
+
+* Header line: **[Conference] [Year] — [Business Unit] — [Area of Interest]**
+* Role line: Role: [Detected from query]
+* A two-column markdown table (Field / Value) with rows:
+  - Dates & Location *(📌 source)*
+  - Total Attendees *(📌 source)*
+  - Exhibiting Companies *(📌 source)*
+  - Corporate Workshops *(📌 source)*
+  - Lilly Presence & Sponsorship *(📌 source)*
+  - Key Themes of the Congress *(📌 source)*
+* Closing 3–5 sentence orienting paragraph (scientific tone, dominant disease areas, strategic context), cited
+
+Use "not reported" only when genuinely absent.
+
+HARD FAIL the Lilly Presence row if the agent invents booth numbers, sponsorship tiers, satellite-symposium counts, or activities not explicitly in the reference. "not reported" is the correct answer when absent.
+
+---
+
+## 8. SECTION 2 — EXECUTIVE SUMMARY
+
+Check:
+
+* EXACTLY 4 paragraphs total (2 per track), lead-track paragraphs FIRST
+* Each paragraph 4–5 sentences when evidence allows (3 strong sentences acceptable; 2 is too thin)
+* Paragraph 1 (lead): most clinically/strategically significant findings for lead track
+* Paragraph 2 (lead): secondary findings, emerging signals, competitive/landscape context
+* Paragraph 3 (secondary): most analytically/developmentally significant findings
+* Paragraph 4 (secondary): secondary findings, platform signals, assay development implications
+* Each paragraph closes with a citation: *📌 Presenter, Institution | Session | Conference Year*
+
+Penalize if:
+
+* Fewer than 4 paragraphs (without per-section fallback)
+* Wrong track order
+* Generic or padded summary
+* Missing or malformed citations
+* Bullet-copying instead of synthesis
+
+---
+
+## 9. SECTION 3 — GUIDELINE UPDATES & CLINICAL RECOMMENDATIONS
+
+Both tracks present, lead first.
+
+Lead Track (cover where supported, with thematic sub-headings):
+* Updated/newly issued guidelines + issuing bodies
+* Biomarker testing requirement changes
+* Lines of therapy / patient selection criteria
+* Practice change / standard of care evolution
+* Acknowledged unmet needs
+* Regional/global adoption variation
+
+Secondary Track (cover where supported, with thematic sub-headings):
+* Guideline-driven assay design / panel composition changes
+* CDx label update cycles
+* Analytical requirements implied by new standards
+* Regulatory pathway implications
+* Alignment/misalignment between guidelines and current assay capabilities
+
+Minimum 2 paragraphs per track when reference supports it. Every paragraph cited.
+
+---
+
+## 10. SECTION 4 — KEY THOUGHT LEADERS & PRESENTERS
+
+Required:
+
+* Markdown table with columns: #, Name & Credentials, Institution, Topic Presented, Track, Session Title, Year
+* Lead-track rows first, then secondary-track rows
+* EVERY named speaker in the reference included
+* Track labels: MA / Dev / Both
+* Closing 3–4 sentence paragraph identifying most influential voices (cited)
+
+HARD FAIL if hallucinated speaker names appear, or if any named speaker is omitted.
+
+---
+
+## 11. SECTION 5 — CLINICAL DATA HIGHLIGHTS
+
+Lead Track — dedicated sub-heading per study/dataset/finding. Cover where supported:
+* Study design, phase, population size
+* Primary + secondary endpoints with EXACT numerical values
+* Subgroup / biomarker-stratified outcomes
+* Real-world evidence / registry data
+* Patient-reported outcomes, QoL
+* Safety + tolerability signals
+* Comparison to prior SoC / historical benchmarks
+* Presenter clinical-significance statements
+
+Secondary Track — dedicated sub-heading per assay/platform/technical finding. Cover where supported:
+* Sensitivity/specificity/concordance with EXACT values
+* VAF thresholds, LOD
+* Platform / sample type comparisons
+* TAT, QNS rates, cost data
+* Real-world lab implementation
+* Inter-lab reproducibility
+* Regulatory submission/approval status
+
+Minimum 3 paragraphs per track when evidence supports it. Every paragraph cited.
+
+Penalize if:
+* Numerical evidence distorted, rounded, or paraphrased
+* Generic statements replace specific data
+* Wrong track ordering
+
+---
+
+## 12. SECTION 6 — COMPETITIVE LANDSCAPE & EMERGING PLATFORMS / NEW TECHNOLOGIES
+
+Lead Track — dedicated sub-heading per competitor/emerging therapy. Cover where supported:
+* Named competitor drugs / mechanisms / programs
+* Head-to-head or indirect comparison data
+* Effects on patient access, testing standards, care pathways
+* Presenter commentary on competitive landscape
+* Unmet needs highlighted relative to Lilly programs
+
+Secondary Track — dedicated sub-heading per platform/technology. Cover where supported:
+* Named competitor diagnostic platforms with claimed performance specs
+* New CE-IVD / FDA-cleared market entrants
+* Emerging technologies (AI interpretation, novel sample types, ultra-sensitive seq)
+* CDx landscape shifts and partnered-assay implications
+* Head-to-head assay comparisons with exact metrics
+
+Every paragraph cited.
+
+---
+
+## 13. SECTION 7 — ASSAY INNOVATIONS & VAF (HIGH-WEIGHT TRACK SEPARATION CHECK)
+
+Lead Track — prose paragraphs only, patient-facing/clinical benefits ONLY:
+* What the innovation enables clinically (faster results, broader access, earlier detection)
+* Patient populations that benefit and how
+* Clinical outcome data linked to the innovation
+* Presenter/guideline statements about clinical utility
+
+MUST NOT contain raw analytical specs.
+
+Secondary Track — analytical detail:
+* MUST include comparison table when ≥2 platforms have performance data:
+  | Platform | Sensitivity (%) | Specificity (%) | Concordance (%) | VAF Threshold | LOD | Sample Type | Panel Size | TAT | QNS Rate | Source |
+* MUST follow the table with ≥1 prose paragraph per platform/theme for additional analytical detail not in table columns
+* Every row + paragraph cited
+
+HIGH-WEIGHT VIOLATION: raw analytical specs (sensitivity %, LOD, VAF thresholds, concordance, etc.) appearing in Lead Track.
+
+Examples:
+* "Enables non-invasive retesting at progression"  ✓ Lead Track
+* "Reduces unnecessary biopsies by 32%"  ✓ Lead Track
+* "ctDNA assay 84% concordance with tissue IHC"  ✗ belongs in Secondary
+* "LoD 1.2 ng/L with CV <10%"  ✗ belongs in Secondary
+
+---
+
+## 14. SECTION 8 — KEY TAKEAWAYS
+
+Required:
+
+* 8–10 numbered action-oriented statements across both tracks (8 is typical; 7 strong takeaways acceptable)
+* Each statement = full sentence of 2–3 clauses naming: specific finding + strategic implication + recommended action / watch item
+* Lead-track takeaways FIRST, numbered sequentially; secondary-track takeaways follow, continuing the numbering
+* Action verbs preferred (Anchor, Build, Match, Pursue, Deploy, Engineer, Align, Launch, Validate, Position, Prioritize)
+* Every takeaway cited *(📌 source)*
+* No repetition or vague platitudes
+
+Penalize if:
+
+* Vague descriptive statements ("There is interest in X")
+* Generic templated phrasing across multiple bullets
+* Missing the finding → implication → action structure
+* Fewer than 7 takeaways when evidence clearly supports more
+* Missing track separation
+* Missing citations
+
+---
+
+## 15. SECTION 9 — REFERENCES
+
+Required:
+
+* Markdown table with columns: #, Presenter, Institution, Session / Publication, Conference, Year
+* # column uses Arabic numerals (1, 2, 3, ...)
+* EVERY source cited inline appears in this table
+* No documents listed that were not cited inline
+* Confidence statement immediately after the table on its own line — exactly one of:
+  - `[CONFIDENCE: HIGH]` — All findings sourced directly from the reference. Every cited value matches the source exactly.
+  - `[CONFIDENCE: MEDIUM]` — Some findings required contextual reading of adjacent sentences. Flagged inline with [INFERRED].
+  - `[CONFIDENCE: LOW]` — Insufficient data in the reference for one or more sections. Adjust filters or verify ingestion pipeline.
+
+Penalize if:
+
+* References table missing or non-tabular
+* Fake/inconsistent sources
+* Confidence tag missing or in wrong format
+* Sources cited inline but absent from the table (or vice versa)
+
+---
+
+## 16. CITATION DISCIPLINE (CRITICAL — HIGH WEIGHT)
+
+Citation discipline alone can lower a score by up to 0.20 even if other criteria pass.
+
+Required formats:
+* Bullet/list items: end with `*(📌 Presenter, Institution | Session | Conference Year)*`
+* Prose paragraphs: end with separate line `*📌 Presenter, Institution | Session | Conference Year*`
+* Table rows: include a Source column with `Session, Year` or `Plenary, Year`
+* When no presenter is named: fallback to `*📌 Workshop/Session Title | Conference Year*`
+* The 📌 emoji is MANDATORY — text-only citations like "(source: X)" or "[1]" alone fail
+* When a single document contributes to multiple sections, it must be cited in EACH section (not assumed)
+* Direct quotes must be reproduced verbatim in quotation marks AND immediately cited
+* "not reported" and "No sufficient evidence in current source material." lines do NOT require citation
+
+Penalize if:
+
+* Many factual claims are uncited
+* Citation format deviates from prescribed patterns
+* Citations do not correspond to entities in the reference
+* Fake citations appear
+
+---
+
+## 17. FACTUAL ACCURACY & ANTI-HALLUCINATION (CRITICAL)
+
+Check:
+
+* Exact values, units, and percentages preserved verbatim — NO rounding, NO paraphrasing of numbers
+* No invented metrics, presenters, institutions, studies, or sessions
+* No overstatement of evidence
+* Direct quotes reproduced exactly when present in reference
+* Missing data handled honestly with prescribed fallback strings
+
+Hallucination phrase blacklist — penalize when these appear UNLESS the reference itself uses the same language:
+* "likely"
+* "presumably"
+* "it can be inferred"
+* "this suggests"
+* "appears to"
+* "may indicate"
+
+HARD FAIL items:
+* Hallucinated presenter, institution, or trial name
+* Fabricated metric, percentage, or sample size
+* Quote attributed to someone who never said it in the reference
+* Speculative future-tense claims not present in reference
+
+---
+
+## 18. CONTENT DENSITY & FORMAT UTILIZATION
+
+Check:
+* Each subsection has ≥2–3 paragraphs/bullet groups when evidence supports it
+* Each paragraph or bullet group introduces a DISTINCT theme or sub-finding
+* No padding, repetition, or rephrasing the same point
+* Mix of prose, bullets, and tables matches content type:
+  - Tables for side-by-side comparison data
+  - Bullets for lists (biomarkers, guideline changes, action items)
+  - Prose for narrative explanation
+* If evidence is rich enough to support both a table AND prose/bullets, include both
+
+Penalize if:
+* Sparse content despite rich reference
+* Repetition instead of new information
+* Single-format dump (e.g., all prose when comparison data exists)
+* Dense unreadable blocks
+
+---
+
+## 19. STYLE & EXECUTIVE READABILITY
+
+Check:
+* Executive tone — precise and concise
+* Professionally formatted markdown
+* Easy to scan
+* Minimal redundancy
+* Abbreviations defined on first use
+* Length: typically 2,000–4,500 words for a complete brief; >5,500 words is usually filler-heavy
+
+Penalize if:
+* Rambling or filler-heavy
+* Poor readability
+* Duplicate content across sections
+* Excessive length without added information
+
+---
+
+## 20. SCORING GUIDANCE WITH HARD CAPS
+
+Score HIGH (0.85–1.00):
+* All 9 sections present in correct `### N. NAME` format and order
+* Excellent source grounding
+* Correct role prioritization in every dual-track section
+* Strong synthesis with full depth extraction (all 8 dimensions where present)
+* High citation compliance (📌 format)
+* Executive-ready output
+* No hallucinations
+
+Score MEDIUM (0.70–0.84):
+* Mostly compliant with moderate omissions or shallow areas
+* Minor citation format issues
+* 1–2 sections slightly thin
+
+Score LOW (0.40–0.69):
+* Partial structure, weak depth, citation gaps, ordering issues
+* Multiple sections under-extracted
+* Hallucination phrase blacklist triggers
+
+Score FAIL (<0.40):
+* Major hallucinations
+* Missing sections
+* Wrong format
+* Unsupported content
+* Severe instruction non-compliance
+
+HARD CAPS (apply regardless of other strengths — take the MINIMUM of all caps that trigger):
+
+* Missing ≥1 required section heading → max 0.50
+* Wrong role/track ordering in ≥3 sections → max 0.55
+* ≥30% of factual claims uncited → max 0.60
+* Any hallucinated presenter, institution, trial, or fabricated metric → max 0.45
+* Missing References table OR missing CONFIDENCE tag → max 0.65
+* Section 7 Lead Track contains raw analytical specs → max 0.80
+* Heading format deviates from `### N. NAME` for ≥1 section → max 0.85
+* Section 2 has fewer than 4 paragraphs (without fallback justification) → max 0.75
+* Section 8 has fewer than 7 takeaways when evidence supports more → max 0.75
+* Hallucination phrase blacklist triggered ≥3 times → max 0.70
+* Numerical value rounded/paraphrased instead of preserved verbatim → max 0.65
+* Structured answer produced when "I cannot answer based on current source material." was required → max 0.30
+
+---
+
+## 21. REQUIRED JUDGE OUTPUT EMPHASIS
+
+When generating judge feedback, prioritize identifying:
+
+* Missing sections or insufficient depth
+* Lost information (compression of multi-fact chunks into single sentences)
+* Citation format failures and coverage gaps
+* Role detection / ordering errors
+* Hallucinated claims (especially Lilly presence and presenters)
+* Section 7 lead/secondary contamination
+* Anti-hallucination phrase blacklist triggers
+* Missing depth dimensions (which of WHAT/WHO/NUMBERS/CONTEXT/COMPARISON/IMPLICATION/GAP/SIGNAL was under-extracted)
+
+Return clear strengths, specific issues (with section numbers), and actionable section-level suggestions.
+
+---
+
+## FINAL RULE
+
+This is NOT a summarization task.
+This is a HIGH-FIDELITY EXTRACTION + STRUCTURED INTELLIGENCE GENERATION task.
+Evaluate strictly on completeness, accuracy, density, citation discipline, and structural compliance.
+""",
+}
+
+
+def get_guidelines(agent_name: str) -> str:
+    """
+    Returns guidelines string for a known agent, or empty string if not registered.
+    Matching is case-insensitive.
+    """
+    return AGENT_GUIDELINES.get(agent_name.lower().strip(), "")
